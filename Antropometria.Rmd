@@ -9,7 +9,8 @@ Analizaremos los datos de Antropometría de la [Encuesta Nacional de Salud y Nut
 
 Primero leemos los datos que están en formato CSV. Para ello usaremos la función read_csv de tidyverse.
 
-```{r }
+
+```{r echo=FALSE}
 library(tidyverse)
 
 en_antropometria=read_csv("CN_ANTROPOMETRIA.csv")
@@ -20,9 +21,10 @@ Esta base de datos tiene 33,818 obervaciones y 57 variables. Nos quedaremos por 
 
 Primero generamos la variable PesoPromedio. Porque cada participante fue pesado 2 veces, y se usaron dos variables para los menores de 60 años de edad (PESO1_1 y PESO1_2) y dos para los mayores de 60 años de edad (PESO12_1 y PESO12_2).
 
-```{r}
+```{r echo=TRUE}
 # Creamos la variable PesoPromedio
 en_antropometria <- mutate(en_antropometria, PesoPromedio = rowMeans(sapply(select(en_antropometria,starts_with("PESO")),as.numeric),na.rm = TRUE))
+
 ```
 
 Similarmente, generamos TallaPromedio. Porque cada participante fue medido en centímetros 2 veces, y se usaron dos variables para los menores de 60 años de edad (TALLA4_1 y TALLA4_2) y dos para los mayores de 60 años de edad (TALLA15_1 y TALLA15_2).
