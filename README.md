@@ -1,6 +1,6 @@
 test0
 
-<!--#include virtual="Antropometria.nb.html" -->
+<include virtual="Antropometria.nb.html" >
 
 test1
 
