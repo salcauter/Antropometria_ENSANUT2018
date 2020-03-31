@@ -1,0 +1,168 @@
+---
+title: "ENSANUT 2018: Indice de Masa Corporal "
+output: html_notebook
+---
+
+Analizaremos los datos de Antropometría de la [Encuesta Nacional de Salud y Nutrición, ENSANUT 2018](https://ensanut.insp.mx/encuestas/ensanut2018/descargas.php). 
+
+## Importar y curar los datos
+
+Primero leemos los datos que están en formato CSV. Para ello usaremos la función read_csv de tidyverse.
+
+```{r }
+library(tidyverse)
+
+en_antropometria=read_csv("CN_ANTROPOMETRIA.csv")
+
+```
+
+Esta base de datos tiene 33,818 obervaciones y 57 variables. Nos quedaremos por ahora con unas cuantas.
+
+Primero generamos la variable PesoPromedio. Porque cada participante fue pesado 2 veces, y se usaron dos variables para los menores de 60 años de edad (PESO1_1 y PESO1_2) y dos para los mayores de 60 años de edad (PESO12_1 y PESO12_2).
+
+```{r}
+# Creamos la variable PesoPromedio
+en_antropometria <- mutate(en_antropometria, PesoPromedio = rowMeans(sapply(select(en_antropometria,starts_with("PESO")),as.numeric),na.rm = TRUE))
+```
+
+Similarmente, generamos TallaPromedio. Porque cada participante fue medido en centímetros 2 veces, y se usaron dos variables para los menores de 60 años de edad (TALLA4_1 y TALLA4_2) y dos para los mayores de 60 años de edad (TALLA15_1 y TALLA15_2).
+
+```{r}
+# Creamos la variable TallaPromedio (cuidado: existe una variable TALLAPIE17*)
+en_antropometria <- mutate(en_antropometria, TallaPromedio = rowMeans(sapply(select(en_antropometria,starts_with("TALLA4") | starts_with("TALLA15")),as.numeric),na.rm = TRUE))
+```
+
+Ahora podemos generar la columna IMC, que corresponde al indice de masa corporal (talla en cm /  peso en kg al cuadrado)
+
+```{r}
+# IMC (escalamos porque la talla está en cm)
+en_antropometria <- mutate(en_antropometria, IMC = 10000*PesoPromedio/(TallaPromedio*TallaPromedio))
+```
+
+Nos quedaremos con las variables IMC, TallaPromedio, PesoPromedio, Edad, EntidadFederativa, Sexo, EstratoSociodemografico Filtremos los casos de mujeres embarazadas, sujetos amputados y sujetos no pesados o no medidos.
+
+```{r}
+# Seleccionar algunas variables y filtrar mujeres embarazadas, amputados y no medidos
+en_AntrpMini <-
+  filter(en_antropometria, is.na(P11) | as.numeric(P11) == 4 ) %>%  # menores de 60 (NA) o no-amputados
+  filter( TallaPromedio < 222  & PesoPromedio < 222 & IMC < 200) %>%  # Quitar los no medidos = 222.2
+  filter( is.na(P6) | as.numeric(P6) == 2 | as.numeric(P6) == 4 ) %>% # Quedarse con mujeres no embarazadas o que no se les pregunta.
+  select(IMC, TallaPromedio, PesoPromedio, EDAD, ENT, SEXO, ESTRATO, GPO_INSP, DOMINIO)
+```
+
+# IMC estratificado
+
+Probemos ver el IMC en función de: SEXO, ESTRATO, EDAD y ENTIDAD
+
+
+### SEXO (1: hombre, 2: mujer )
+```{r}
+group_by(en_AntrpMini, SEXO) %>%
+  summarise(IMC_Promedio = mean(IMC), IMC_DesvEst = sd(IMC))
+```
+
+Es más interesante graficar las distribuciones
+```{r}
+ggplot(en_AntrpMini, aes(x=IMC, fill=as.factor(abs(SEXO-3)))) + 
+         geom_density(alpha=.3) +
+  labs(title = "IMC por SEXO", y="Densidad")
+```
+
+#### Adolescentes por SEXO
+```{r}
+ggplot(en_AntrpMini[as.numeric(en_AntrpMini$EDAD) > 9 & as.numeric(en_AntrpMini$EDAD) < 20,], aes(x=IMC, fill=as.factor(abs(SEXO-3)))) + 
+         geom_density(alpha=.3) +
+  labs(fill="Sexo (1 mujer)", title="Distribución del IMC por sexo en adolescentes", y="Densidad")
+```
+
+
+
+### Grupo de edad (1: Preescolar, 2: Escolar, 3: Adolescentes, 4: Adultos)
+Summary
+```{r}
+group_by(en_AntrpMini[en_AntrpMini$GPO_INSP > 0,], GPO_INSP) %>%
+  summarise(IMC_Promedio = mean(IMC), IMC_DesvEst = sd(IMC))
+```
+Plot
+```{r}
+ggplot(en_AntrpMini[en_AntrpMini$GPO_INSP > 0,], aes(x=IMC, fill=as.factor(GPO_INSP))) + 
+         geom_density(alpha=.3)+
+  labs(fill="Grupo de Edad", title="Distribución del IMC por grupo de edad")
+```
+
+Boxplot
+```{r}
+ggplot(en_AntrpMini[en_AntrpMini$GPO_INSP>0,], aes(x=GPO_INSP, y=IMC, color=as.factor(GPO_INSP)))+
+  geom_boxplot(notch = TRUE) +
+  labs(color="Grupo de edad", title="IMC por grupo de edad")
+```
+
+### Estrato Sociodemográfico (1-4)
+```{r}
+group_by(en_AntrpMini, ESTRATO) %>%
+  summarise(IMC_Promedio = mean(IMC), IMC_DesvEst = sd(IMC))
+```
+Plot
+```{r}
+ggplot(en_AntrpMini, aes(x=IMC, fill=as.factor(ESTRATO))) + 
+         geom_density(alpha=.3) +
+  labs(title="Distribución del IMC por Estrato Sociodemográfico", fill="Estrato S.", y="Densidad")
+
+```
+No estoy seguro qué significa Estrato Sociodemográfico, pero exploraré si tiene que ver algo con el DOMINIO (rural y urbano)
+```{r}
+ggplot(en_AntrpMini, aes(x=ESTRATO, y=IMC,color=as.factor(DOMINIO))) + 
+         geom_point()
+```
+
+
+### Dominio
+
+Urbano=1, Rural=2
+
+```{r}
+group_by(en_AntrpMini, as.factor(DOMINIO)) %>%
+  summarise(IMC_Promedio = mean(IMC), IMC_DesvEst = sd(IMC))
+```
+Plot
+```{r}
+ggplot(en_AntrpMini, aes(x=IMC, fill=as.factor(DOMINIO))) + 
+         geom_density(alpha=.3)
+```
+Solo adultos
+```{r}
+ggplot(en_AntrpMini[as.numeric(en_AntrpMini$EDAD)>19,], aes(x=IMC, fill=as.factor(DOMINIO))) + 
+         geom_density(alpha=.3)
+```
+
+
+### Entidad
+```{r}
+group_by(en_AntrpMini, as.factor(ENT)) %>%
+  summarise(IMC_Promedio = mean(IMC), IMC_DesvEst = sd(IMC))
+```
+
+
+### Edad
+
+Boxplot
+```{r}
+ggplot(en_AntrpMini, aes(x=EDAD, y=IMC, color=as.factor(GPO_INSP)))+
+  geom_boxplot() +
+  labs(color="ESTRATO", title="IMC por grupo de edad") +
+  geom_smooth(method="gam")
+```
+
+
+```{r}
+ggplot(en_AntrpMini, aes(x=EDAD, y=IMC, color=as.factor(ESTRATO)))+
+  geom_point() +
+  labs(color="ESTRATO", title="IMC en función de la edad")
+```
+
+
+### Por Hacer...
+
+1. Analisis cuantitativos.
+2. Regresión logística para identificar los principales factores asociados a la obesidad (considerar más variables).
+3. Shiny para ver la distribución geográfica del IMC y otras variables antropométricas.
